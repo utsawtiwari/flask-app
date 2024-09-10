@@ -1,1 +1,44 @@
+pipeline {
+    agent any
+    environment {
+        GITHUB_PAT = credentials('github-pat')  
+        DOCKER_CREDENTIALS_ID = 'docker-credentials'  
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git url: 'https://github.com/utsawtiwari/flask-app.git',
+                    credentialsId: 'github-pat' 
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t utsawt/flask-app:latest .'
+            }
+        }
+        stage('Test') {
+            steps {
+                
+                sh 'docker run --rm utsawt/flask-app:latest pytest tests/'
+            }
+        }
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh 'docker push utsawt/flask-app:latest'
+                }
+            }
+        }
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh 'kubectl apply -f k8s/deployment.yaml'
+                sh 'kubectl apply -f k8s/service.yaml'
+                sh 'kubectl apply -f k8s/ingress.yaml'
+                sh 'kubectl apply -f k8s/nginx-deployment.yaml'
+                sh 'kubectl apply -f k8s/nginx-service.yaml'
+            }
+        }
+    }
+}
 
